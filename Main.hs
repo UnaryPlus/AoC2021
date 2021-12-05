@@ -3,16 +3,21 @@
 
 module Main where
 
+import qualified Debug.Trace as Debug
+import qualified Text.Read as Read
 import qualified Data.Maybe as Maybe
 import qualified Data.Char as Char
 import qualified Data.List as List
-import qualified Text.Read as Read
-import qualified Debug.Trace as Debug
+import qualified Data.Foldable as Fold
+import qualified Control.Applicative as Ap
+
+import qualified Data.Set as Set
+import Data.Set (Set)
 
 main :: IO ()
 main = do
-  contents <- readFile "giant-squid.txt"
-  print (giantSquid2 contents)
+  contents <- readFile "hydrothermal-venture.txt"
+  print (hydrothermalVenture2 contents)
 
 --------------------------
 --- DAY 1: SONAR SWEEP ---
@@ -255,3 +260,70 @@ giantSquid2 file = let
   nums = commaSepNums headLine
   boards = bingoBoards $ spaceSepNums (unwords tailLines)
   in Maybe.fromMaybe 0 (playReverseBingo nums boards)
+
+-----------------------------------
+--- DAY 5: Hydrothermal Venture ---
+-----------------------------------
+
+data OceanLine = OceanLine (Int, Int) (Int, Int)
+
+readOceanLine :: String -> Maybe OceanLine
+readOceanLine str = let
+  replace ',' = ' '
+  replace '-' = ' '
+  replace '>' = ' '
+  replace c = c
+  in case words (map replace str) of
+    [s1, s2, s3, s4] -> do
+      x1 <- Read.readMaybe s1
+      x2 <- Read.readMaybe s2
+      x3 <- Read.readMaybe s3
+      x4 <- Read.readMaybe s4
+      return $ OceanLine (x1, x2) (x3, x4)
+    _ -> Nothing
+
+isOrthogonal :: OceanLine -> Bool
+isOrthogonal (OceanLine (x1, y1) (x2, y2)) =
+  x1 == x2 || y1 == y2
+
+toCoordinates :: OceanLine -> Set (Int, Int)
+toCoordinates (OceanLine (x1, y1) (x2, y2)) = let
+  xStep = signum (x2 - x1)
+  yStep = signum (y2 - y1)
+  xCoords = [x1, x1 + xStep .. x2]
+  yCoords = [y1, y1 + yStep .. y2]
+  in Set.fromList (zip xCoords yCoords)
+
+cannotOverlap :: OceanLine -> OceanLine -> Bool
+cannotOverlap (OceanLine (x1, y1) (x2, y2)) (OceanLine (x3, y3) (x4, y4)) =
+  max x1 x2 < min x3 x4 || min x1 x2 > max x3 x4 ||
+  max y1 y2 < min y3 y4 || min y1 y2 > max y3 y4
+
+lineOverlap :: OceanLine -> OceanLine -> Set (Int, Int)
+lineOverlap line1 line2
+  | cannotOverlap line1 line2 = Set.empty
+  | otherwise = Set.intersection
+      (toCoordinates line1)
+      (toCoordinates line2)
+
+uniquePairs :: [a] -> [(a, a)]
+uniquePairs [] = []
+uniquePairs (x:xs) = zip (repeat x) xs ++ uniquePairs xs
+
+allOverlaps :: [OceanLine] -> Set (Int, Int)
+allOverlaps lns = Fold.fold do
+  (line1, line2) <- uniquePairs lns
+  return (lineOverlap line1 line2)
+
+hydrothermalVenture1 :: String -> Int
+hydrothermalVenture1 file = let
+  oceanLines = Maybe.mapMaybe readOceanLine (lines file)
+  orthogonal = filter isOrthogonal oceanLines
+  overlaps = allOverlaps orthogonal
+  in Set.size overlaps
+
+hydrothermalVenture2 :: String -> Int
+hydrothermalVenture2 file = let
+  oceanLines = Maybe.mapMaybe readOceanLine (lines file)
+  overlaps = allOverlaps oceanLines
+  in Set.size overlaps
