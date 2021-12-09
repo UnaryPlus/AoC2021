@@ -19,8 +19,8 @@ import Control.Lens ((%~))
 
 main :: IO ()
 main = do
-  contents <- readFile "lanternfish.txt"
-  print (lanternfish2 contents)
+  contents <- readFile "treachery-of-whales.txt"
+  print (treacheryOfWhales2 contents)
 
 --------------------------
 --- DAY 1: SONAR SWEEP ---
@@ -369,3 +369,36 @@ lanternfish2 :: String -> Int
 lanternfish2 file = let
   initial = makeFishState (commaSepNums file)
   in numFish (composeN 256 fishDay initial)
+
+--------------------------------------
+--- DAY 7: THE TREACHERY OF WHALES ---
+--------------------------------------
+
+medianInt :: [Int] -> Int
+medianInt xs = let
+  halfLength = length xs `div` 2
+  secondHalf = drop halfLength (List.sort xs)
+  in Maybe.fromMaybe 0 (headMaybe secondHalf)
+
+differences :: Int -> [Int] -> [Int]
+differences median = map (abs . subtract median)
+
+treacheryOfWhales1 :: String -> Int
+treacheryOfWhales1 file = let
+  positions = commaSepNums file
+  median = medianInt positions
+  in sum (differences median positions)
+
+meanInt :: [Int] -> Int
+meanInt xs = let
+  float = fromIntegral
+  in round $ float (sum xs) / float (length xs)
+
+triangular :: Int -> Int
+triangular n = n * (n + 1) `div` 2
+
+treacheryOfWhales2 :: String -> Int
+treacheryOfWhales2 file = let
+  positions = commaSepNums file
+  mean = meanInt positions
+  in sum $ map triangular (differences mean positions)
