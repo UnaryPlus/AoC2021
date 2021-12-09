@@ -14,10 +14,13 @@ import qualified Control.Applicative as Ap
 import qualified Data.Set as Set
 import Data.Set (Set)
 
+import qualified Control.Lens as Lens
+import Control.Lens ((%~))
+
 main :: IO ()
 main = do
-  contents <- readFile "hydrothermal-venture.txt"
-  print (hydrothermalVenture2 contents)
+  contents <- readFile "lanternfish.txt"
+  print (lanternfish2 contents)
 
 --------------------------
 --- DAY 1: SONAR SWEEP ---
@@ -327,3 +330,42 @@ hydrothermalVenture2 file = let
   oceanLines = Maybe.mapMaybe readOceanLine (lines file)
   overlaps = allOverlaps oceanLines
   in Set.size overlaps
+
+--------------------------
+--- DAY 6: LANTERNFISH ---
+--------------------------
+
+composeN :: Int -> (a -> a) -> a -> a
+composeN n f
+  | n <= 0 = id
+  | otherwise = f . composeN (n - 1) f
+
+type FishState = (Int, Int, Int, Int, Int, Int, Int, Int, Int)
+
+makeFishState :: [Int] -> FishState
+makeFishState = let
+  inc lens = lens %~ (+1)
+  add n = inc case n of
+    0 -> Lens._1 ; 1 -> Lens._2
+    2 -> Lens._3 ; 3 -> Lens._4
+    4 -> Lens._5 ; 5 -> Lens._6
+    6 -> Lens._7 ; _ -> Lens._8
+  in foldr add (0, 0, 0, 0, 0, 0, 0, 0, 0)
+
+fishDay :: FishState -> FishState
+fishDay (n0, n1, n2, n3, n4, n5, n6, n7, n8) =
+  (n1, n2, n3, n4, n5, n6, n7 + n0, n8, n0)
+
+numFish :: FishState -> Int
+numFish (n0, n1, n2, n3, n4, n5, n6, n7, n8) =
+  n0 + n1 + n2 + n3 + n4 + n5 + n6 + n7 + n8
+
+lanternfish1 :: String -> Int
+lanternfish1 file = let
+  initial = makeFishState (commaSepNums file)
+  in numFish (composeN 80 fishDay initial)
+
+lanternfish2 :: String -> Int
+lanternfish2 file = let
+  initial = makeFishState (commaSepNums file)
+  in numFish (composeN 256 fishDay initial)
