@@ -11,7 +11,9 @@ import qualified Data.List as List
 import qualified Data.Foldable as Fold
 import qualified Control.Applicative as Ap
 
+import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Map (Map)
 import Data.Set (Set)
 
 import qualified Control.Lens as Lens
@@ -19,8 +21,8 @@ import Control.Lens ((%~))
 
 main :: IO ()
 main = do
-  contents <- readFile "treachery-of-whales.txt"
-  print (treacheryOfWhales2 contents)
+  contents <- readFile "seven-segment-search.txt"
+  print (sevenSegmentSearch2 contents)
 
 --------------------------
 --- DAY 1: SONAR SWEEP ---
@@ -402,3 +404,130 @@ treacheryOfWhales2 file = let
   positions = commaSepNums file
   mean = meanInt positions
   in sum $ map triangular (differences mean positions)
+
+-----------------------------------
+--- DAY 8: SEVEN SEGMENT SEARCH ---
+-----------------------------------
+
+outputValues :: String -> [String]
+outputValues = drop 11 . words
+
+uniqueLength :: String -> Bool
+uniqueLength str =
+  case length str of
+    2 -> True ; 3 -> True
+    4 -> True ; 7 -> True
+    _ -> False
+
+sevenSegmentSearch1 :: String -> Int
+sevenSegmentSearch1 file = let
+  outputs = concatMap outputValues (lines file)
+  in count uniqueLength outputs
+
+digitSignals :: String -> [String]
+digitSignals = take 10 . words
+
+filterLength :: Int -> [String] -> [String]
+filterLength n = filter \str -> length str == n
+
+filterCount :: Int -> String -> String
+filterCount n str = filter (\c -> count (== c) str == n) str
+
+remove :: (Eq a) => [a] -> [a] -> [a]
+remove xs = filter (`notElem` xs)
+
+signalA :: [String] -> Maybe Char
+signalA strs = do
+  one <- headMaybe (filterLength 2 strs)
+  seven <- headMaybe (filterLength 3 strs)
+  headMaybe $ filter (`notElem` one) seven
+
+signalBDE :: [String] -> Maybe (Char, Char, Char)
+signalBDE strs = do
+  four <- headMaybe (filterLength 4 strs)
+  let twoThreeFive = filterLength 5 strs
+  let sigs = concat (four : twoThreeFive)
+  sigB <- headMaybe (filterCount 2 sigs)
+  sigD <- headMaybe (filterCount 4 sigs)
+  sigE <- headMaybe (filterCount 1 sigs)
+  return (sigB, sigD, sigE)
+
+signalC :: (Char, Char, Char) -> [String] -> Maybe Char
+signalC (_, sigD, sigE) strs = do
+  let zeroSixNine = filterLength 6 strs
+  let sigs = concat zeroSixNine
+  let twice = filterCount 2 sigs
+  headMaybe (remove [sigD, sigE] twice)
+
+signalG :: Char -> (Char, Char, Char) -> [String] -> Maybe Char
+signalG sigA (_, sigD, _) strs = do
+  let twoThreeFive = filterLength 5 strs
+  let sigs = concat twoThreeFive
+  let thrice = filterCount 3 sigs
+  headMaybe (remove [sigA, sigD] thrice)
+
+signalF :: Char -> (Char, Char, Char) -> Char -> Char -> [String] -> Maybe Char
+signalF sigA (sigB, sigD, sigE) sigC sigG strs =
+  headMaybe $ remove [sigA, sigB, sigC, sigD, sigE, sigG] (concat strs)
+
+solveSignals :: [String] -> Maybe (Char, Char, Char, Char, Char, Char, Char)
+solveSignals strs = do
+  sigA <- signalA strs
+  sigBDE@(sigB, sigD, sigE) <- signalBDE strs
+  sigC <- signalC sigBDE strs
+  sigG <- signalG sigA sigBDE strs
+  sigF <- signalF sigA sigBDE sigC sigG strs
+  return (sigA, sigB, sigC, sigD, sigE, sigF, sigG)
+
+data Segment = A | B | C | D | E | F | G
+  deriving (Show, Eq, Ord)
+
+makeSegment :: (Char, Char, Char, Char, Char, Char, Char) -> Char -> Maybe Segment
+makeSegment (sigA, sigB, sigC, sigD, sigE, sigF, sigG) sig
+  | sig == sigA = Just A
+  | sig == sigB = Just B
+  | sig == sigC = Just C
+  | sig == sigD = Just D
+  | sig == sigE = Just E
+  | sig == sigF = Just F
+  | sig == sigG = Just G
+  | otherwise = Nothing
+
+display :: [Segment] -> Maybe Int
+display segs =
+  case List.sort segs of
+    [A, B, C, E, F, G] -> Just 0
+    [C, F] -> Just 1
+    [A, C, D, E, G] -> Just 2
+    [A, C, D, F, G] -> Just 3
+    [B, C, D, F] -> Just 4
+    [A, B, D, F, G] -> Just 5
+    [A, B, D, E, F, G] -> Just 6
+    [A, C, F] -> Just 7
+    [A, B, C, D, E, F, G] -> Just 8
+    [A, B, C, D, F, G] -> Just 9
+    _ -> Nothing
+
+displayString :: (Char, Char, Char, Char, Char, Char, Char) -> String -> Maybe Int
+displayString sigs str = do
+  segments <- mapM (makeSegment sigs) str
+  display segments
+
+solveLine :: String -> Maybe [Int]
+solveLine line = do
+  let sigs = digitSignals line
+  solution <- solveSignals sigs
+  let outputs = outputValues line
+  mapM (displayString solution) outputs
+
+digitsToInt :: [Int] -> Int
+digitsToInt = let
+  build _ [] = 0
+  build factor (x:xs) = factor * x + build (factor * 10) xs
+  in build 1 . reverse
+
+sevenSegmentSearch2 :: String -> Int
+sevenSegmentSearch2 file = let
+  digits = Maybe.mapMaybe solveLine (lines file)
+  ints = map digitsToInt digits
+  in sum ints
