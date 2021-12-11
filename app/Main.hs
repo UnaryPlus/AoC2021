@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -10,13 +11,9 @@ import qualified Data.Char as Char
 import qualified Data.List as List
 import qualified Data.Foldable as Fold
 import qualified Data.Bifunctor as Bf
-import qualified Control.Applicative as Ap
-import qualified Control.Monad as Monad
 import Data.Function ((&))
 
-import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Map (Map)
 import Data.Set (Set)
 
 import qualified Control.Lens as Lens
@@ -24,8 +21,8 @@ import Control.Lens ((%~))
 
 main :: IO ()
 main = do
-  contents <- readFile "input/smoke-basin.txt"
-  print (smokeBasin2 contents)
+  contents <- readFile "input/syntax-scoring.txt"
+  print (syntaxScoring2 contents)
 
 --------------------------
 --- DAY 1: SONAR SWEEP ---
@@ -71,9 +68,11 @@ sonarSweep2 file = let
 --- DAY 2: DIVE ---
 -------------------
 
+headMaybe :: [a] -> Maybe a
 headMaybe [] = Nothing
 headMaybe (x:_) = Just x
 
+tailMaybe :: [a] -> Maybe [a]
 tailMaybe [] = Nothing
 tailMaybe (_:xs) = Just xs
 
@@ -159,7 +158,7 @@ binaryDiagnostic1 file = let
 getMaybe :: Int -> [a] -> Maybe a
 getMaybe _ [] = Nothing
 getMaybe 0 (x:_) = Just x
-getMaybe index (x:xs) = getMaybe (index - 1) xs
+getMaybe index (_:xs) = getMaybe (index - 1) xs
 
 matchesAt :: (Eq a) => Int -> a -> [a] -> Bool
 matchesAt index test list
@@ -183,7 +182,6 @@ extractRowBy f index rows = do
 binaryDiagnostic2 :: String -> Int
 binaryDiagnostic2 file = let
   rows = Maybe.mapMaybe readBinaryRow (lines file)
-  modes = columnModes rows
   extract f = Maybe.fromMaybe [] (extractRowBy f 0 rows)
   oxygen = extract id
   carbon = extract not
@@ -396,7 +394,7 @@ treacheryOfWhales1 file = let
 
 meanInt :: [Int] -> Int
 meanInt xs = let
-  float = fromIntegral
+  float = fromIntegral :: Int -> Double
   in round $ float (sum xs) / float (length xs)
 
 triangular :: Int -> Int
@@ -638,3 +636,77 @@ smokeBasin2 file = let
   basins = makeBasins guls
   sizes = Debug.traceShow (take 10 guls) map basinSize basins
   in product $ take 3 $ reverse (List.sort sizes)
+
+------------------------------
+--- DAY 10: SYNTAX SCORING ---
+------------------------------
+
+data Shape = Round | Square | Curly | Angle
+  deriving (Show, Eq)
+
+data Chiralty = Opening | Closing
+  deriving (Show)
+
+type Bracket = (Shape, Chiralty)
+
+readBracket :: Char -> Maybe Bracket
+readBracket = \case
+  '(' -> Just (Round, Opening)
+  '[' -> Just (Square, Opening)
+  '{' -> Just (Curly, Opening)
+  '<' -> Just (Angle, Opening)
+  ')' -> Just (Round, Closing)
+  ']' -> Just (Square, Closing)
+  '}' -> Just (Curly, Closing)
+  '>' -> Just (Angle, Closing)
+  _ -> Nothing
+
+parseBracket :: [Shape] -> Bracket -> Either Shape [Shape]
+parseBracket expected (shape, Opening) =
+  Right (shape : expected)
+parseBracket expected (shape, Closing) =
+  case expected of
+    s : rest | s == shape -> Right rest
+    _ -> Left shape
+
+parseLine :: String -> Either Shape [Shape]
+parseLine line = let
+  brackets = Maybe.mapMaybe readBracket line
+  in Fold.foldlM parseBracket [] brackets
+
+bracketScore :: Shape -> Int
+bracketScore = \case
+  Round -> 3
+  Square -> 57
+  Curly -> 1197
+  Angle -> 25137
+
+scoreLine :: String -> Int
+scoreLine line =
+  case parseLine line of
+    Left shape -> bracketScore shape
+    Right _ -> 0
+
+syntaxScoring1 :: String -> Int
+syntaxScoring1 = sum . map scoreLine . lines
+
+completeLine :: String -> Maybe [Shape]
+completeLine line =
+  case parseLine line of
+    Left _ -> Nothing
+    Right expected -> Just expected
+
+scoreCompletion :: [Shape] -> Int
+scoreCompletion = let
+  add score shape =
+    score * 5 +
+    case shape of
+      Round -> 1; Square -> 2
+      Curly -> 3; Angle -> 4
+  in foldl add 0
+
+syntaxScoring2 :: String -> Int
+syntaxScoring2 file = let
+  completions = Maybe.mapMaybe completeLine (lines file)
+  scores = map scoreCompletion completions
+  in medianInt scores
