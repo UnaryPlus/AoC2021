@@ -19,11 +19,6 @@ import Data.Set (Set)
 import qualified Control.Lens as Lens
 import Control.Lens ((%~))
 
-main :: IO ()
-main = do
-  contents <- readFile "input/syntax-scoring.txt"
-  print (syntaxScoring2 contents)
-
 --------------------------
 --- DAY 1: SONAR SWEEP ---
 --------------------------
@@ -710,3 +705,110 @@ syntaxScoring2 file = let
   completions = Maybe.mapMaybe completeLine (lines file)
   scores = map scoreCompletion completions
   in medianInt scores
+
+-----------------------------
+--- DAY 11: DUMBO OCTOPUS ---
+-----------------------------
+
+type Octopus = (Int, Bool)
+type OctopusGrid = [[Octopus]]
+
+readGrid :: [String] -> Maybe OctopusGrid
+readGrid = let
+  toOctopus c = (, False) <$> Read.readMaybe [c]
+  in mapM (mapM toOctopus)
+
+increaseEnergy :: OctopusGrid -> OctopusGrid
+increaseEnergy = (map . map . Bf.first) (1+)
+
+getOctopus :: (Int, Int) -> OctopusGrid -> Maybe Octopus
+getOctopus (r, c) octs = do
+  row <- getMaybe r octs
+  getMaybe c row
+
+updateList :: Int -> (a -> a) -> [a] -> [a]
+updateList index f xs =
+  case getMaybe index xs of
+    Nothing -> xs
+    Just x -> take index xs ++ [f x] ++ drop (index + 1) xs
+
+updateOctopus :: (Int, Int) -> (Octopus -> Octopus) -> OctopusGrid -> OctopusGrid
+updateOctopus (r, c) f octs = let
+  updateRow = updateList c f
+  in updateList r updateRow octs
+
+flashOctopus :: (Int, Int) -> OctopusGrid -> OctopusGrid
+flashOctopus (r, c) octs  =
+  case getOctopus (r, c) octs  of
+    Nothing -> octs
+    Just (_, True) -> octs
+    Just (energy, _) | energy < 10 -> octs
+    Just _ -> let
+      flashed = updateOctopus (r, c) (Bf.second (const True)) octs
+      increase (r', c') = updateOctopus (r', c') (Bf.first (1+))
+      increaseAll = foldr (.) id . map increase
+      in increaseAll
+        [ (r - 1, c), (r + 1, c)
+        , (r, c - 1), (r, c + 1)
+        , (r - 1, c - 1), (r + 1, c - 1)
+        , (r - 1, c + 1), (r + 1, c + 1)
+        ] flashed
+
+flashGrid :: OctopusGrid -> OctopusGrid
+flashGrid octs = let
+  rows = length octs
+  cols = maybe 0 length (getMaybe 0 octs)
+  coords = (,) <$> [0 .. rows - 1] <*> [0 .. cols - 1]
+  flashed = foldr flashOctopus octs coords
+  in if flashed == octs
+    then flashed
+    else flashGrid flashed
+
+renewGrid :: OctopusGrid -> (Int, OctopusGrid)
+renewGrid octs = let
+  didFlash (_, b) = b
+  renew (energy, False) = (energy, False)
+  renew (_, True) = (0, False)
+  in (sum $ map (count didFlash) octs, map (map renew) octs)
+
+stepGrid :: OctopusGrid -> (Int, OctopusGrid)
+stepGrid = renewGrid . flashGrid . increaseEnergy
+
+composeSum :: (b -> (Int, c)) -> (a -> (Int, b)) -> a -> (Int, c)
+composeSum f g x = let
+  (num1, x1) = g x
+  (num2, x2) = f x1
+  in (num1 + num2, x2)
+
+composeSumN :: Int -> (a -> (Int, a)) -> a -> (Int, a)
+composeSumN n f
+  | n <= 0 = (0, )
+  | otherwise = composeSum f $ composeSumN (n - 1) f
+
+dumboOctopus1 :: String -> Int
+dumboOctopus1 file =
+  case readGrid (lines file) of
+    Nothing -> 0
+    Just octs -> fst (composeSumN 100 stepGrid octs)
+
+stepAllFlash :: Int -> OctopusGrid -> Int
+stepAllFlash step octs = let
+  (num, octs') = stepGrid octs
+  in if num == sum (map length octs)
+    then step
+    else stepAllFlash (step + 1) octs'
+
+dumboOctopus2 :: String -> Int
+dumboOctopus2 file =
+  case readGrid (lines file) of
+    Nothing -> 0
+    Just octs -> stepAllFlash 1 octs
+
+---------------------
+--- MAIN FUNCTION ---
+---------------------
+
+main :: IO ()
+main = do
+  file <- readFile "input/dumbo-octopus.txt"
+  print (dumboOctopus2 file)
