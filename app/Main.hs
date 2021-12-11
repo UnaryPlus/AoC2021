@@ -9,7 +9,10 @@ import qualified Data.Maybe as Maybe
 import qualified Data.Char as Char
 import qualified Data.List as List
 import qualified Data.Foldable as Fold
+import qualified Data.Bifunctor as Bf
 import qualified Control.Applicative as Ap
+import qualified Control.Monad as Monad
+import Data.Function ((&))
 
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -21,8 +24,8 @@ import Control.Lens ((%~))
 
 main :: IO ()
 main = do
-  contents <- readFile "seven-segment-search.txt"
-  print (sevenSegmentSearch2 contents)
+  contents <- readFile "input/smoke-basin.txt"
+  print (smokeBasin2 contents)
 
 --------------------------
 --- DAY 1: SONAR SWEEP ---
@@ -531,3 +534,107 @@ sevenSegmentSearch2 file = let
   digits = Maybe.mapMaybe solveLine (lines file)
   ints = map digitsToInt digits
   in sum ints
+
+--------------------------
+--- DAY 9: SMOKE BASIN ---
+--------------------------
+
+type Altitudes = [[Int]]
+
+charToInt :: Char -> Maybe Int
+charToInt c = Read.readMaybe [c]
+
+readAltitudes :: [String] -> Maybe Altitudes
+readAltitudes = let
+  toInt c = Read.readMaybe [c]
+  in mapM (mapM toInt)
+
+getAltitude :: Altitudes -> (Int, Int) -> Maybe Int
+getAltitude alts (r, c) = do
+  row <- getMaybe r alts
+  getMaybe c row
+
+getLowPoint :: Altitudes -> (Int, Int) -> Maybe Int
+getLowPoint alts (r, c) = let
+  neighbors = Maybe.mapMaybe (getAltitude alts)
+    [ (r - 1, c), (r + 1, c)
+    , (r, c - 1), (r, c + 1)
+    ]
+  in do
+  alt <- getAltitude alts (r, c)
+  if all (> alt) neighbors
+    then Just alt
+    else Nothing
+
+lowPoints :: Altitudes -> [Int]
+lowPoints alts = let
+  rows = length alts
+  cols = maybe 0 length (getMaybe 0 alts)
+  coords = (,) <$> [0 .. rows - 1] <*> [0 .. cols - 1]
+  in Maybe.mapMaybe (getLowPoint alts) coords
+
+smokeBasin1 :: String -> Int
+smokeBasin1 file = let
+  altitudes = readAltitudes $ map trim (lines file)
+  in maybe 0 (sum . map (1+) . lowPoints) altitudes
+
+indexNines :: [Int] -> [Int]
+indexNines = let
+  add (i, 9) indexes = i : indexes
+  add _ indexes = indexes
+  in foldr add [] . zip [0..]
+
+type Gully = (Int, Int, Int)
+type Basin = [Gully]
+
+gulliesRow :: Int -> [Int] -> [Gully]
+gulliesRow num row = let
+  nines = -1 : indexNines row ++ [length row]
+  toGully (start, end)
+    | start + 1 == end = Nothing
+    | otherwise = Just (num, start + 1, end)
+  in Maybe.mapMaybe toGully (pairs nines)
+
+gullies :: Altitudes -> [Gully]
+gullies alts = Fold.fold (zipWith gulliesRow [0..] alts)
+
+connected :: Gully -> Gully -> Bool
+connected (num1, start1, end1) (num2, start2, end2)
+  | abs (num1 - num2) /= 1 = False
+  | start2 >= end1 = False
+  | start1 >= end2 = False
+  | otherwise = True
+
+connectedBasin :: Basin -> Gully -> Bool
+connectedBasin basin gully = any (connected gully) basin
+
+extendBasin :: (Basin, [Gully]) -> (Basin, [Gully])
+extendBasin ([], guls) = ([], guls)
+extendBasin (basin, guls) =
+  List.partition (connectedBasin basin) guls
+  & extendBasin
+  & Bf.first (basin ++)
+
+makeBasin :: [Gully] -> (Basin, [Gully])
+makeBasin [] = ([], [])
+makeBasin (gul : guls) = extendBasin ([gul], guls)
+
+makeBasins :: [Gully] -> [Basin]
+makeBasins guls = let
+  (basin, guls') = makeBasin guls
+  in if null guls'
+    then [basin]
+    else basin : makeBasins guls'
+
+basinSize :: Basin -> Int
+basinSize = let
+  gullySize (_, start, end) = end - start
+  in sum . map gullySize
+
+smokeBasin2 :: String -> Int
+smokeBasin2 file = let
+  altitudes = readAltitudes $ map trim (lines file)
+  guls = maybe [] gullies altitudes
+  basins = makeBasins guls
+  sizes = Debug.traceShow (take 10 guls) map basinSize basins
+  in product $ take 3 $ reverse (List.sort sizes)
