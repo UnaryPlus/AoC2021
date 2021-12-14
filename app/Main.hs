@@ -6,6 +6,7 @@ module Main where
 
 import qualified Debug.Trace as Debug
 import qualified Text.Read as Read
+import qualified Data.Bool as Bool
 import qualified Data.Maybe as Maybe
 import qualified Data.Char as Char
 import qualified Data.List as List
@@ -13,7 +14,9 @@ import qualified Data.Foldable as Fold
 import qualified Data.Bifunctor as Bf
 import Data.Function ((&))
 
+import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Map (Map)
 import Data.Set (Set)
 
 import qualified Control.Lens as Lens
@@ -804,11 +807,168 @@ dumboOctopus2 file =
     Nothing -> 0
     Just octs -> stepAllFlash 1 octs
 
+-------------------------------
+--- DAY 12: PASSAGE PATHING ---
+-------------------------------
+
+data Location
+  = Start
+  | End
+  | Small String
+  | Big String
+  deriving (Eq, Ord, Show)
+
+type Cave = Map Location [Location]
+
+parseLocation :: String -> Maybe Location
+parseLocation "start" = Just Start
+parseLocation "end" = Just End
+parseLocation "" = Nothing
+parseLocation (c:cs)
+  | Char.isUpper c = Just $ Big (c:cs)
+  | otherwise = Just $ Small (c:cs)
+
+parseCaveList :: [String] -> Maybe Cave
+parseCaveList [] = Just Map.empty
+parseCaveList [_] = Nothing
+parseCaveList (str1:str2:locs) = do
+  cave <- parseCaveList locs
+  loc1 <- parseLocation str1
+  loc2 <- parseLocation str2
+  return $ addConnection (loc1, loc2) $ addConnection (loc2, loc1) cave
+
+addConnection :: (Location, Location) -> Cave -> Cave
+addConnection (loc1, loc2) cave = let
+  connects = Maybe.fromMaybe [] (Map.lookup loc1 cave)
+  in Map.insert loc1 (loc2 : connects) cave
+
+parseCave :: String -> Maybe Cave
+parseCave file = let
+  replace '-' = ' '
+  replace c = c
+  in parseCaveList $ words (map replace file)
+
+type CanRevisit = Bool
+data Crawler = Crawler CanRevisit Location [Location]
+
+possibleMove :: CanRevisit -> [Location] -> Location -> (CanRevisit, Bool)
+possibleMove crv previous loc =
+  case loc of
+    _ | loc `notElem` previous -> (crv, True)
+    Big _ -> (crv, True)
+    Small _ | crv -> (False, True)
+    _ -> (crv, False)
+
+crawlerFinished :: Crawler -> Bool
+crawlerFinished (Crawler _ End _) = True
+crawlerFinished _ = False
+
+filterPossible :: CanRevisit -> [Location] -> [Location] -> [(CanRevisit, Location)]
+filterPossible _ _ [] = []
+filterPossible crv previous (loc : locs) = let
+  (newCrv, possible) = possibleMove crv previous loc
+  filtered = filterPossible crv previous locs
+  in if possible then (newCrv, loc) : filtered else filtered
+
+moveCrawler :: Cave -> Crawler -> [Crawler]
+moveCrawler cave (Crawler crv loc previous) = let
+  connects = Maybe.fromMaybe [] (Map.lookup loc cave)
+  possible = filterPossible crv previous connects
+  makeCrawler (newCrv, newLoc) = Crawler newCrv newLoc (loc : previous)
+  in map makeCrawler possible
+
+moveCrawlerEnd :: Cave -> Crawler -> [Crawler]
+moveCrawlerEnd cave crawler = let
+  crawlers = moveCrawler cave crawler
+  (finished, notFinished) = List.partition crawlerFinished crawlers
+  in finished ++ concatMap (moveCrawlerEnd cave) notFinished
+
+findPaths :: CanRevisit -> Cave -> Set [Location]
+findPaths crv cave = let
+  crawlers = moveCrawlerEnd cave (Crawler crv Start [])
+  getPath (Crawler _ loc previous) = loc : previous
+  in Set.fromList (map getPath crawlers)
+
+passagePathing1 :: String -> Int
+passagePathing1 file = let
+  cave = parseCave file
+  paths = fmap (findPaths False) cave
+  in maybe 0 Set.size paths
+
+passagePathing2 :: String -> Int
+passagePathing2 file = let
+  cave = parseCave file
+  paths = fmap (findPaths True) cave
+  in maybe 0 Set.size paths
+
+-----------------------------------
+--- DAY 13: TRANSPARENT ORIGAMI ---
+-----------------------------------
+
+type Dot = (Int, Int)
+
+data Fold
+  = XFold Int
+  | YFold Int
+  deriving (Show)
+
+parseDots :: String -> Set Dot
+parseDots = let
+  dotList [] = []
+  dotList [_] = []
+  dotList (x:y:nums) = (x, y) : dotList nums
+  in Set.fromList . dotList . commaSepNums
+
+parseFold :: String -> Maybe Fold
+parseFold line =
+  case List.splitAt 13 line of
+    ("fold along x=", num) -> XFold <$> Read.readMaybe num
+    ("fold along y=", num) -> YFold <$> Read.readMaybe num
+    _ -> Nothing
+
+foldOver :: Int -> Int -> Int
+foldOver line x
+  | x < line = x
+  | otherwise = line * 2 - x
+
+transformDot :: Fold -> Dot -> Dot
+transformDot (XFold line) (x, y) = (foldOver line x, y)
+transformDot (YFold line) (x, y) = (x, foldOver line y)
+
+transparentOrigami1 :: String -> Int
+transparentOrigami1 file = let
+  dots = parseDots file
+  folds = Maybe.mapMaybe parseFold (lines file)
+  in case folds of
+    [] -> 0
+    fold : _ -> Set.size $ Set.map (transformDot fold) dots
+
+dotMatrix :: Set Dot -> [[Bool]]
+dotMatrix dots = let
+  maxX = maximum (Set.map fst dots)
+  maxY = maximum (Set.map snd dots)
+  exists point = Set.member point dots
+  row y = map (exists . (, y)) [0..maxX]
+  in map row [0..maxY]
+
+dotImage :: Set Dot -> String
+dotImage dots = let
+  matrix = dotMatrix dots
+  toChar = Bool.bool ' ' '#'
+  in unlines $ map (map toChar) matrix
+
+transparentOrigami2 :: String -> String
+transparentOrigami2 file = let
+  dots = parseDots file
+  folds = Maybe.mapMaybe parseFold (lines file)
+  transform ds fold = Set.map (transformDot fold) ds
+  in dotImage (foldl transform dots folds)
+
 ---------------------
 --- MAIN FUNCTION ---
 ---------------------
 
 main :: IO ()
 main = do
-  file <- readFile "input/dumbo-octopus.txt"
-  print (dumboOctopus2 file)
+  file <- readFile "input/transparent-origami.txt"
+  putStrLn (transparentOrigami2 file)
