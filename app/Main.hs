@@ -964,11 +964,101 @@ transparentOrigami2 file = let
   transform ds fold = Set.map (transformDot fold) ds
   in dotImage (foldl transform dots folds)
 
+---------------------------------------
+--- DAY 14: EXTENDED POLYMERISATION ---
+---------------------------------------
+
+type InsertionRules = Map (Char, Char) Char
+type Polymer = Map (Char, Char) Int
+
+alterAdd :: Int -> (Char, Char) -> Polymer -> Polymer
+alterAdd x pair = let
+  addMaybe freq =
+    case x + Maybe.fromMaybe 0 freq of
+      0 -> Nothing
+      new -> Just new
+  in Map.alter addMaybe pair
+
+makePolymer :: [Char] -> Polymer
+makePolymer = foldr (alterAdd 1) Map.empty . pairs
+
+updatePolymer :: InsertionRules -> (Char, Char) -> Int -> Polymer -> Polymer
+updatePolymer rules (c1, c2) freq polymer =
+  case Map.lookup (c1, c2) rules of
+    Nothing -> polymer
+    Just c3 -> alterAdd (-freq) (c1, c2)
+      $ alterAdd freq (c1, c3)
+      $ alterAdd freq (c3, c2)
+      polymer
+
+extendPolymer :: InsertionRules -> Polymer -> Polymer
+extendPolymer rules polymer =
+  Map.foldrWithKey (updatePolymer rules) polymer polymer
+
+wordsBy :: [Char] -> String -> [String]
+wordsBy cs = let
+  replace c
+    | c `elem` cs = ' '
+    | otherwise = c
+  in words . map replace
+
+parseRules :: String -> Maybe (Char, Char, Polymer, InsertionRules)
+parseRules file = let
+  parse [] = Just Map.empty
+  parse [_] = Nothing
+  parse ([c1,c2]:[c3]:rest) =
+    Map.insert (c1, c2) c3 <$> parse rest
+  parse _ = Nothing
+  in do
+    (first, rest) <- List.uncons $ wordsBy ['-', '>'] file
+    rules <- parse rest
+    start <- headMaybe first
+    end <- headMaybe (reverse first)
+    return (start, end, makePolymer first, rules)
+
+charFrequency :: Char -> Char -> Polymer -> Char -> Int
+charFrequency start end polymer char = let
+  when c x = if char == c then x else 0
+  addFreq (c1, c2) pairFreq freq = freq
+    + when c1 pairFreq
+    + when c2 pairFreq
+  in Map.foldrWithKey addFreq 0 polymer
+    + when start 1
+    + when end 1
+    & (`div` 2)
+
+characters :: Polymer -> Set Char
+characters = let
+  insert (c1, c2) chars = Set.insert c1 (Set.insert c2 chars)
+  in foldr insert Set.empty . Map.keys
+
+rangeFrequencies :: Char -> Char -> Polymer -> Maybe Int
+rangeFrequencies start end polymer
+  | Map.null polymer = Nothing
+  | otherwise = let
+      chars = Set.toList (characters polymer)
+      freqs = map (charFrequency start end polymer) chars
+      in Just (maximum freqs - minimum freqs)
+
+extendedPolymerisation1 :: String -> Int
+extendedPolymerisation1 file =
+  Maybe.fromMaybe 0 do
+    (start, end, polymer, rules) <- parseRules file
+    let extended = composeN 10 (extendPolymer rules) polymer
+    rangeFrequencies start end extended
+
+extendedPolymerisation2 :: String -> Int
+extendedPolymerisation2 file =
+  Maybe.fromMaybe 0 do
+    (start, end, polymer, rules) <- parseRules file
+    let extended = composeN 40 (extendPolymer rules) polymer
+    rangeFrequencies start end extended
+
 ---------------------
 --- MAIN FUNCTION ---
 ---------------------
 
 main :: IO ()
 main = do
-  file <- readFile "input/transparent-origami.txt"
-  putStrLn (transparentOrigami2 file)
+  file <- readFile "input/extended-polymerisation.txt"
+  print (extendedPolymerisation2 file)
