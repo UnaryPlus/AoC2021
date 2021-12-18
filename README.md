@@ -1,2 +1,2 @@
 # Advent of Code 2021
-Original Haskell solutions for the for the first 14 days of the 2021 [Advent of Code](https://adventofcode.com).
+Original solutions for the 2021 [Advent of Code](https://adventofcode.com) challenges. These solutions are written in Haskell and only go up to day 14.
