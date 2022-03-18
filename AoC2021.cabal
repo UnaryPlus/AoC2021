@@ -1,5 +1,5 @@
 cabal-version: 2.4
-name:          AoC2021
+name:          aoc2021
 version:       0.1.0.0
 
 author:     UnaryPlus
@@ -7,7 +7,7 @@ maintainer: ombspring@gmail.com
 
 extra-source-files: README.md
 
-executable AoC2021
+executable aoc2021
     main-is: Main.hs
 
     build-depends:
