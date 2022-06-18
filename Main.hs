@@ -1,3 +1,8 @@
+{-
+  (c) 2022 Owen Bechtel
+  License: MIT (see LICENSE file)
+-}
+
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE TupleSections #-}
